@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { Toaster } from "@/components/ui/sonner"
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { AuthProvider } from "@/lib/auth"
 import "./globals.css"
 
@@ -66,6 +67,7 @@ export default function RootLayout({
           />
 
           <Analytics />
+          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>
