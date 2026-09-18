@@ -46,9 +46,18 @@ async function handle(
       body: body || undefined,
     })
     const payload = await response.text()
+    if (response.status === 401) {
+      return NextResponse.json(
+        { detail: "AI backend authentication failed; check GRITGRID_AI_API_TOKEN" },
+        { status: 502, headers: { "Cache-Control": "private, no-store, max-age=0" } },
+      )
+    }
     return new NextResponse(payload, {
       status: response.status,
-      headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json" },
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+        "Content-Type": response.headers.get("Content-Type") ?? "application/json",
+      },
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI Workforce backend is unavailable"

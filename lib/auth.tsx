@@ -20,10 +20,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = React.useCallback(async () => {
     try {
       const response = await fetch("/api/auth/session", { cache: "no-store" })
+      if (!response.ok) throw new Error(`Session request failed with ${response.status}`)
       const session = (await response.json()) as { user?: AuthUser | null }
       setUser(session.user ?? null)
     } catch {
-      setUser(null)
+      // Keep an existing session during transient auth-service failures.
     } finally {
       setLoading(false)
     }
