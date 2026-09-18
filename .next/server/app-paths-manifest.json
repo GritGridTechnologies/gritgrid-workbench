@@ -1,4 +1,0 @@
-{
-  "/api/ai/[...path]/route": "app/api/ai/[...path]/route.js",
-  "/page": "app/page.js"
-}
