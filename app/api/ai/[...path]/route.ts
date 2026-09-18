@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { proxyAiRequest } from "@/lib/ai/client"
+import { AuthError, requireRole } from "@/lib/auth-server"
 
 const ALLOWED_PATHS = [
   /^health$/,
@@ -28,12 +29,13 @@ async function handle(
   }
 
   if (request.method !== "GET") {
-    const session = request.cookies.get("gg_session")?.value
-    if (!session) {
-      return NextResponse.json(
-        { detail: "Sign in to the Workbench before changing workforce data" },
-        { status: 401 },
-      )
+    try {
+      await requireRole(["OWNER", "MANAGER"])
+    } catch (error) {
+      if (error instanceof AuthError) {
+        return NextResponse.json({ detail: error.message }, { status: error.status })
+      }
+      return NextResponse.json({ detail: "Authentication service is unavailable" }, { status: 503 })
     }
   }
 

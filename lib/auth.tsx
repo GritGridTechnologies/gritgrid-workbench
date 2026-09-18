@@ -1,100 +1,62 @@
 "use client"
 
 import * as React from "react"
-import { employees } from "./mock-data"
-import type { Employee, Role } from "./types"
-
-/**
- * ---------------------------------------------------------------------------
- * DEMO AUTH (simulated)
- * ---------------------------------------------------------------------------
- * This is a clearly-marked simulated auth layer for the UI build. It does NOT
- * perform real authentication. When wired to Neon + a real auth provider, the
- * session is issued server-side and this context reads the authenticated user.
- * The shared demo password is intentionally public for the preview.
- */
-export const DEMO_PASSWORD = "gritgrid"
-const SESSION_COOKIE = "gg_session"
-
-function readCookie(name: string): string | null {
-  if (typeof document === "undefined") return null
-  const match = document.cookie.match(
-    new RegExp("(?:^|; )" + name + "=([^;]*)"),
-  )
-  return match ? decodeURIComponent(match[1]) : null
-}
-
-function writeCookie(name: string, value: string) {
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 8}; SameSite=Lax`
-}
-
-function clearCookie(name: string) {
-  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`
-}
+import type { AuthUser } from "./auth-types"
 
 interface AuthContextValue {
-  user: Employee | null
+  user: AuthUser | null
   loading: boolean
-  login: (email: string, password: string) => Promise<Employee>
-  loginAs: (role: Role) => void
-  logout: () => void
+  login: (email: string, password: string) => Promise<AuthUser>
+  logout: () => Promise<void>
+  refresh: () => Promise<void>
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = React.useState<Employee | null>(null)
+  const [user, setUser] = React.useState<AuthUser | null>(null)
   const [loading, setLoading] = React.useState(true)
 
+  const refresh = React.useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/session", { cache: "no-store" })
+      const session = (await response.json()) as { user?: AuthUser | null }
+      setUser(session.user ?? null)
+    } catch {
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   React.useEffect(() => {
-    const id = readCookie(SESSION_COOKIE)
-    if (id) {
-      const found = employees.find((e) => e.id === id)
-      if (found) setUser(found)
+    void refresh()
+  }, [refresh])
+
+  const login = React.useCallback(async (email: string, password: string) => {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+    const payload = (await response.json().catch(() => null)) as
+      | { user?: AuthUser; detail?: string }
+      | null
+    if (!response.ok || !payload?.user) {
+      throw new Error(payload?.detail ?? "Unable to sign in")
     }
-    setLoading(false)
+    setUser(payload.user)
+    return payload.user
   }, [])
 
-  const login = React.useCallback(
-    (email: string, password: string) =>
-      new Promise<Employee>((resolve, reject) => {
-        // Simulated latency so loading states are visible.
-        setTimeout(() => {
-          const found = employees.find(
-            (e) => e.email.toLowerCase() === email.trim().toLowerCase(),
-          )
-          if (!found) {
-            reject(new Error("No account found for that email address."))
-            return
-          }
-          if (password !== DEMO_PASSWORD) {
-            reject(new Error("Incorrect password. Please try again."))
-            return
-          }
-          writeCookie(SESSION_COOKIE, found.id)
-          setUser(found)
-          resolve(found)
-        }, 650)
-      }),
-    [],
-  )
-
-  const loginAs = React.useCallback((role: Role) => {
-    const found = employees.find((e) => e.role === role)
-    if (found) {
-      writeCookie(SESSION_COOKIE, found.id)
-      setUser(found)
-    }
-  }, [])
-
-  const logout = React.useCallback(() => {
-    clearCookie(SESSION_COOKIE)
+  const logout = React.useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" })
     setUser(null)
   }, [])
 
   const value = React.useMemo(
-    () => ({ user, loading, login, loginAs, logout }),
-    [user, loading, login, loginAs, logout],
+    () => ({ user, loading, login, logout, refresh }),
+    [user, loading, login, logout, refresh],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

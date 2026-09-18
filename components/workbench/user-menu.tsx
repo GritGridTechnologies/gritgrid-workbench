@@ -9,12 +9,10 @@ import {
   Sun,
   User,
   Settings as SettingsIcon,
-  Repeat,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth"
 import { ROLE_LABEL } from "@/lib/permissions"
 import { initials } from "@/lib/mock-data"
-import type { Role } from "@/lib/types"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -25,12 +23,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
-
-const ROLES: Role[] = ["OWNER", "MANAGER", "EMPLOYEE"]
 
 export function UserMenu({ variant = "sidebar" }: { variant?: "sidebar" | "top" }) {
-  const { user, logout, loginAs } = useAuth()
+  const { user, logout } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const router = useRouter()
 
@@ -44,7 +39,7 @@ export function UserMenu({ variant = "sidebar" }: { variant?: "sidebar" | "top" 
       >
         <Avatar className="size-8">
           <AvatarFallback
-            style={{ backgroundColor: user.avatarColor + "22", color: user.avatarColor }}
+            style={{ backgroundColor: "#2563eb22", color: "#2563eb" }}
           >
             {initials(user.name)}
           </AvatarFallback>
@@ -66,7 +61,7 @@ export function UserMenu({ variant = "sidebar" }: { variant?: "sidebar" | "top" 
       >
         <Avatar className="size-8">
           <AvatarFallback
-            style={{ backgroundColor: user.avatarColor + "22", color: user.avatarColor }}
+            style={{ backgroundColor: "#2563eb22", color: "#2563eb" }}
           >
             {initials(user.name)}
           </AvatarFallback>
@@ -88,7 +83,7 @@ export function UserMenu({ variant = "sidebar" }: { variant?: "sidebar" | "top" 
             {user.email}
           </span>
           <span className="pt-1">
-            <Badge variant="purple">{user.title}</Badge>
+            <Badge variant="purple">{ROLE_LABEL[user.role]}</Badge>
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -105,29 +100,9 @@ export function UserMenu({ variant = "sidebar" }: { variant?: "sidebar" | "top" 
           {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="flex items-center gap-1.5">
-          <Repeat className="size-3" /> Demo: switch role
-        </DropdownMenuLabel>
-        <div className="flex gap-1 px-2 pb-1.5">
-          {ROLES.map((r) => (
-            <button
-              key={r}
-              onClick={() => loginAs(r)}
-              className={cn(
-                "flex-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
-                user.role === r
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent",
-              )}
-            >
-              {ROLE_LABEL[r]}
-            </button>
-          ))}
-        </div>
-        <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => {
-            logout()
+          onClick={async () => {
+            await logout()
             router.replace("/login")
           }}
           className="text-danger focus:text-danger [&_svg]:text-danger"

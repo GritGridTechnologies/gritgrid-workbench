@@ -1,0 +1,5 @@
+[33mea6ce76[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Patch Next.js security update
+[33me5e7cc4[m Stop tracking local environment file
+[33m5e2160a[m Integrate AI workforce control center
+[33mcda7e0d[m Merge pull request #1 from GritGridTechnologies/v0/gritgrid-workbench-36bc14e1
+[33m14050d4[m feat: add Tailwind CSS and custom design system variables to globals.css

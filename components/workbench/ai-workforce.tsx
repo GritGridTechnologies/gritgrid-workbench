@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import {
   Activity,
   Brain,
@@ -108,7 +109,9 @@ async function requestAi<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
     const detail = payload && typeof payload === "object" && "detail" in payload ? payload.detail : null
-    throw new Error(typeof detail === "string" ? detail : `Request failed with ${response.status}`)
+    const error = new Error(typeof detail === "string" ? detail : `Request failed with ${response.status}`)
+    error.name = `HTTP_${response.status}`
+    throw error
   }
   return payload as T
 }
@@ -120,6 +123,16 @@ function formatDate(value?: string | null) {
 
 function labelize(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function friendlyError(error: unknown) {
+  if (!(error instanceof Error)) return "The request could not be completed."
+  if (error.name === "HTTP_401") return "Your session has expired. Sign in again to continue."
+  if (error.name === "HTTP_403") return "Your account is not authorized for this action."
+  if (error.name === "HTTP_404") return "This backend operation is not available."
+  if (error.name === "HTTP_502" || error.name === "HTTP_503") return "The AI Workforce backend is unavailable. Try again shortly."
+  if (error.message.includes("timed out")) return "The AI Workforce backend timed out. Try again shortly."
+  return error.message
 }
 
 function StatusBadge({ value }: { value: string }) {
@@ -153,7 +166,8 @@ function JsonBlock({ value }: { value: unknown }) {
 }
 
 export function AiWorkforce() {
-  const { user, loginAs } = useAuth()
+  const { user, logout } = useAuth()
+  const router = useRouter()
   const [section, setSection] = React.useState<Section>("Overview")
   const [menuOpen, setMenuOpen] = React.useState(false)
   const [agents, setAgents] = React.useState<AgentSummary[]>([])
@@ -181,6 +195,7 @@ export function AiWorkforce() {
   const [memoryBusy, setMemoryBusy] = React.useState(false)
   const [memoryFormOpen, setMemoryFormOpen] = React.useState(false)
   const [memoryDraft, setMemoryDraft] = React.useState({ memory_key: "", content: "", memory_type: "company" })
+  const [profileOpen, setProfileOpen] = React.useState(false)
 
   const loadData = React.useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true)
@@ -225,12 +240,16 @@ export function AiWorkforce() {
       setNotice(success)
       await loadData(true)
     } catch (mutationError) {
-      setNotice(mutationError instanceof Error ? mutationError.message : "The AI Workforce action failed")
+      setNotice(friendlyError(mutationError))
     }
   }, [loadData, user])
 
   async function runObjective() {
     if (!objective.trim()) return
+    if (!user) {
+      setNotice("Sign in to the Workbench before sending a CEO objective.")
+      return
+    }
     setObjectiveBusy(true)
     setObjectiveResult(null)
     try {
@@ -242,7 +261,7 @@ export function AiWorkforce() {
       setNotice("Objective submitted to the CEO orchestrator.")
       await loadData(true)
     } catch (objectiveError) {
-      setNotice(objectiveError instanceof Error ? objectiveError.message : "The orchestration request failed")
+      setNotice(friendlyError(objectiveError))
     } finally {
       setObjectiveBusy(false)
     }
@@ -264,7 +283,7 @@ export function AiWorkforce() {
       setMemory(result)
       setNotice(memoryQuery.trim() ? "Memory search complete." : "Showing the latest company memory.")
     } catch (memoryError) {
-      setNotice(memoryError instanceof Error ? memoryError.message : "Memory search failed")
+      setNotice(friendlyError(memoryError))
     } finally {
       setMemoryBusy(false)
     }
@@ -306,7 +325,10 @@ export function AiWorkforce() {
           <div><span className="workbenchEyebrow">{meta.eyebrow}</span><h1>{meta.title}</h1></div>
           <div className="topbarActions">
             <div className={cn("systemStatus", error ? "systemStatusWarn" : "")}><span />{error ? "Backend attention" : status?.status === "online" ? "Systems ready" : "Connecting"}</div>
-            <button className="profileButton" title="Use owner preview session" onClick={() => loginAs("OWNER")}>{user ? user.name.slice(0, 2).toUpperCase() : "GG"}</button>
+            <div className="profileWrap">
+              <button className="profileButton" title={user ? "Open account menu" : "Sign in"} onClick={() => user ? setProfileOpen((open) => !open) : router.push("/login")}>{user ? user.name.slice(0, 2).toUpperCase() : "GG"}</button>
+              {profileOpen && user && <div className="profileMenu"><strong>{user.name}</strong><span>{user.email}</span><span className="profileRole">{user.role} access</span><button onClick={async () => { await logout(); setProfileOpen(false); router.replace("/login") }}><span>Sign out</span></button></div>}
+            </div>
           </div>
         </header>
 
@@ -318,7 +340,7 @@ export function AiWorkforce() {
           {section === "Overview" && <Overview status={status} agents={agents} tasks={tasks} runs={runs} events={events} approvals={approvals} loading={loading} onNavigate={setSection} />}
           {section === "Agents" && <Agents agents={agents} loading={loading} selectedAgent={selectedAgent} onSelect={setSelectedAgent} />}
           {section === "Command Center" && <CommandCenter objective={objective} setObjective={setObjective} busy={objectiveBusy} result={objectiveResult} onRun={() => void runObjective()} />}
-          {section === "Tasks" && <TasksView tasks={visibleTasks} allTasks={tasks} agents={agents} status={taskStatus} setStatus={(value) => { setTaskStatus(value); setTaskPage(1) }} agent={taskAgent} setAgent={(value) => { setTaskAgent(value); setTaskPage(1) }} page={taskPage} pageCount={pageCount} setPage={setTaskPage} loading={loading} open={taskFormOpen} setOpen={setTaskFormOpen} draft={taskDraft} setDraft={setTaskDraft} busy={taskBusy} setBusy={setTaskBusy} onCreate={(input) => void runMutation(async () => { const created = await requestAi<TaskRecord>("tasks", { method: "POST", body: JSON.stringify(input) }); setTasks((current) => [created, ...current]) }, "Task created in the AI backend.")} />}
+          {section === "Tasks" && <TasksView tasks={visibleTasks} allTasks={tasks} agents={agents} status={taskStatus} setStatus={(value) => { setTaskStatus(value); setTaskPage(1) }} agent={taskAgent} setAgent={(value) => { setTaskAgent(value); setTaskPage(1) }} page={taskPage} pageCount={pageCount} setPage={setTaskPage} loading={loading} open={taskFormOpen} setOpen={setTaskFormOpen} draft={taskDraft} setDraft={setTaskDraft} busy={taskBusy} setBusy={setTaskBusy} onCreate={(input) => runMutation(async () => { const created = await requestAi<TaskRecord>("tasks", { method: "POST", body: JSON.stringify(input) }); setTasks((current) => [created, ...current]) }, "Task created in the AI backend.")} />}
           {section === "Runs / Activity" && <ActivityView runs={runs} events={events} loading={loading} />}
           {section === "Approvals" && <ApprovalsView approvals={approvals} loading={loading} onDecision={(id, decision) => void runMutation(() => requestAi(`approvals/${id}/${decision}`, { method: "POST" }), `Approval ${decision === "approve" ? "approved" : "rejected"}.`)} />}
           {section === "Company Brain" && <MemoryView memory={memory} query={memoryQuery} setQuery={setMemoryQuery} busy={memoryBusy} open={memoryFormOpen} setOpen={setMemoryFormOpen} draft={memoryDraft} setDraft={setMemoryDraft} loading={loading} onSearch={searchMemory} onSave={(input) => void runMutation(async () => { const created = await requestAi<MemoryRecord>("memory", { method: "POST", body: JSON.stringify(input) }); setMemory((current) => [created, ...current]) }, "Memory saved to the Company Brain.")} onDelete={(id) => void runMutation(async () => { await requestAi(`memory/${id}`, { method: "DELETE" }); setMemory((current) => current.filter((item) => item.id !== id)) }, "Memory deleted.")} />}
@@ -356,8 +378,8 @@ function CommandCenter({ objective, setObjective, busy, result, onRun }: { objec
   return <div className="commandLayout"><section className="commandPanel"><div className="commandIcon"><Command className="size-5" /></div><span className="workbenchEyebrow">CEO ORCHESTRATOR</span><h3>What should the workforce accomplish?</h3><p>Describe the objective in business terms. The backend decides delegation and persists the workflow state.</p><textarea value={objective} onChange={(event) => setObjective(event.target.value)} placeholder="Research the Hyderabad student market and create a marketing campaign proposal." rows={6} /><button className="primaryButton" onClick={onRun} disabled={busy || !objective.trim()}>{busy ? <RefreshCw className="size-4 spin" /> : <PlayCircle className="size-4" />}{busy ? "Submitting objective" : "Send to CEO"}</button></section><section className="workflowPanel"><span className="workbenchEyebrow">WORKFLOW PATH</span><div className="workflowSteps"><div><b>01</b><span>Objective</span></div><ChevronRight /><div><b>02</b><span>CEO</span></div><ChevronRight /><div><b>03</b><span>Specialists</span></div><ChevronRight /><div><b>04</b><span>QA / result</span></div></div>{result ? <div className="resultArea"><div className="resultHeader"><strong>Backend response</strong><StatusBadge value="completed" /></div><JsonBlock value={result} /></div> : <div className="waitingArea"><Sparkles className="size-5" /><strong>Awaiting an objective</strong><p>The response shown here will be the actual orchestration result.</p></div>}</section></div>
 }
 
-function TasksView({ tasks, allTasks, agents, status, setStatus, agent, setAgent, page, pageCount, setPage, loading, open, setOpen, draft, setDraft, busy, setBusy, onCreate }: { tasks: TaskRecord[]; allTasks: TaskRecord[]; agents: AgentSummary[]; status: string; setStatus: (value: string) => void; agent: string; setAgent: (value: string) => void; page: number; pageCount: number; setPage: (value: number) => void; loading: boolean; open: boolean; setOpen: (value: boolean) => void; draft: { title: string; description: string; assigned_agent: string; priority: string }; setDraft: React.Dispatch<React.SetStateAction<{ title: string; description: string; assigned_agent: string; priority: string }>>; busy: boolean; setBusy: (value: boolean) => void; onCreate: (input: typeof draft) => void }) {
-  return <section className="surfacePanel tablePanel"><div className="panelHeader"><div><span className="workbenchEyebrow">TASK QUEUE</span><h3>{allTasks.length ? `${allTasks.length} persisted tasks` : "No persisted tasks"}</h3></div><button className="primaryButton compactButton" onClick={() => setOpen(!open)}><Plus className="size-4" /> New task</button></div>{open && <form className="inlineForm" onSubmit={(event) => { event.preventDefault(); if (!draft.title || !draft.assigned_agent) return; setBusy(true); onCreate(draft); setDraft({ title: "", description: "", assigned_agent: "", priority: "normal" }); setOpen(false); setBusy(false) }}><input required placeholder="Task title" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /><input placeholder="Description" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /><select required value={draft.assigned_agent} onChange={(event) => setDraft((current) => ({ ...current, assigned_agent: event.target.value }))}><option value="">Assign agent</option>{agents.map((item) => <option key={item.name} value={item.name}>{labelize(item.name)}</option>)}</select><select value={draft.priority} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select><button className="primaryButton compactButton" disabled={busy} type="submit">Create</button></form>}<div className="filterRow"><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option>{["pending", "running", "completed", "failed", "cancelled", "blocked"].map((value) => <option key={value} value={value}>{labelize(value)}</option>)}</select><select value={agent} onChange={(event) => setAgent(event.target.value)}><option value="all">All agents</option>{agents.map((item) => <option key={item.name} value={item.name}>{labelize(item.name)}</option>)}</select><span className="filterCount">{tasks.length} shown</span></div>{loading ? <div className="loadingBox">Loading tasks...</div> : tasks.length ? <div className="dataTableWrap"><table className="dataTable"><thead><tr><th>Task</th><th>Agent</th><th>Status</th><th>Priority</th><th>Created</th><th>Updated</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.task_id}><td><strong>{task.task_id}</strong><span>{task.title}</span></td><td>{labelize(task.assigned_agent)}</td><td><StatusBadge value={task.status} /></td><td>{labelize(task.priority)}</td><td>{formatDate(task.created_at)}</td><td>{formatDate(task.completed_at ?? task.started_at)}</td></tr>)}</tbody></table></div> : <EmptyState title="No tasks match" detail="Try clearing the filters or create a backend task." />}<div className="pagination"><button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Previous</button><span>Page {page} of {pageCount}</span><button onClick={() => setPage(Math.min(pageCount, page + 1))} disabled={page === pageCount}>Next</button></div></section>
+function TasksView({ tasks, allTasks, agents, status, setStatus, agent, setAgent, page, pageCount, setPage, loading, open, setOpen, draft, setDraft, busy, setBusy, onCreate }: { tasks: TaskRecord[]; allTasks: TaskRecord[]; agents: AgentSummary[]; status: string; setStatus: (value: string) => void; agent: string; setAgent: (value: string) => void; page: number; pageCount: number; setPage: (value: number) => void; loading: boolean; open: boolean; setOpen: (value: boolean) => void; draft: { title: string; description: string; assigned_agent: string; priority: string }; setDraft: React.Dispatch<React.SetStateAction<{ title: string; description: string; assigned_agent: string; priority: string }>>; busy: boolean; setBusy: (value: boolean) => void; onCreate: (input: typeof draft) => Promise<void> }) {
+  return <section className="surfacePanel tablePanel"><div className="panelHeader"><div><span className="workbenchEyebrow">TASK QUEUE</span><h3>{allTasks.length ? `${allTasks.length} persisted tasks` : "No persisted tasks"}</h3></div><button className="primaryButton compactButton" onClick={() => setOpen(!open)}><Plus className="size-4" /> New task</button></div>{open && <form className="inlineForm" onSubmit={async (event) => { event.preventDefault(); if (!draft.title || !draft.assigned_agent) return; setBusy(true); try { await onCreate(draft); setDraft({ title: "", description: "", assigned_agent: "", priority: "normal" }); setOpen(false) } finally { setBusy(false) } }}><input required placeholder="Task title" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /><input placeholder="Description" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /><select required value={draft.assigned_agent} onChange={(event) => setDraft((current) => ({ ...current, assigned_agent: event.target.value }))}><option value="">Assign agent</option>{agents.map((item) => <option key={item.name} value={item.name}>{labelize(item.name)}</option>)}</select><select value={draft.priority} onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value }))}><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select><button className="primaryButton compactButton" disabled={busy} type="submit">{busy ? "Creating" : "Create"}</button></form>}<div className="filterRow"><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option>{["pending", "running", "completed", "failed", "cancelled", "blocked"].map((value) => <option key={value} value={value}>{labelize(value)}</option>)}</select><select value={agent} onChange={(event) => setAgent(event.target.value)}><option value="all">All agents</option>{agents.map((item) => <option key={item.name} value={item.name}>{labelize(item.name)}</option>)}</select><span className="filterCount">{tasks.length} shown</span></div>{loading ? <div className="loadingBox">Loading tasks...</div> : tasks.length ? <div className="dataTableWrap"><table className="dataTable"><thead><tr><th>Task</th><th>Agent</th><th>Status</th><th>Priority</th><th>Created</th><th>Updated</th></tr></thead><tbody>{tasks.map((task) => <tr key={task.task_id}><td><strong>{task.task_id}</strong><span>{task.title}</span></td><td>{labelize(task.assigned_agent)}</td><td><StatusBadge value={task.status} /></td><td>{labelize(task.priority)}</td><td>{formatDate(task.created_at)}</td><td>{formatDate(task.completed_at ?? task.started_at)}</td></tr>)}</tbody></table></div> : <EmptyState title="No tasks match" detail="Try clearing the filters or create a backend task." />}<div className="pagination"><button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Previous</button><span>Page {page} of {pageCount}</span><button onClick={() => setPage(Math.min(pageCount, page + 1))} disabled={page === pageCount}>Next</button></div></section>
 }
 
 function ActivityView({ runs, events, loading }: { runs: RunRecord[]; events: EventRecord[]; loading: boolean }) {
