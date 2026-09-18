@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "next-themes"
 import { Toaster } from "@/components/ui/sonner"
+import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/lib/auth"
 import "./globals.css"
 
@@ -25,8 +26,13 @@ export const metadata: Metadata = {
   description:
     "Internal employee platform for GritGrid Technologies — build, manage and deliver.",
   applicationName: "GritGrid Workbench",
-  robots: { index: false, follow: false },
-  icons: { icon: "/favicon.svg" },
+  robots: {
+    index: false,
+    follow: false,
+  },
+  icons: {
+    icon: "/favicon.svg",
+  },
 }
 
 export const viewport: Viewport = {
@@ -52,7 +58,14 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>{children}</AuthProvider>
-          <Toaster richColors closeButton position="top-right" />
+
+          <Toaster
+            richColors
+            closeButton
+            position="top-right"
+          />
+
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
