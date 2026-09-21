@@ -45,7 +45,8 @@ async function handle(
 
   try {
     const body = request.method === "GET" ? undefined : await request.text()
-    const response = await proxyAiRequest(`/${path}${request.nextUrl.search}`, {
+    const upstreamPath = path === "agents/ceo/tasks" ? `/api/${path}` : `/${path}`
+    const response = await proxyAiRequest(`${upstreamPath}${request.nextUrl.search}`, {
       method: request.method,
       body: body || undefined,
     })
