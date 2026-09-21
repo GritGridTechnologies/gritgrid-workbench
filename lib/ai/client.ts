@@ -1,6 +1,7 @@
 import type {
   AgentSummary,
   AiHealth,
+  ArtifactRecord,
   ApprovalDecision,
   ApprovalRecord,
   EventRecord,
@@ -8,13 +9,25 @@ import type {
   MemoryRecord,
   MemoryUpdateInput,
   ObjectiveResult,
+  ProviderCatalog,
+  ProviderRecord,
   RunRecord,
   TaskCreateInput,
   TaskRecord,
+  CEOTaskRequest,
+  CEOTaskResponse,
+  WorkforceMetrics,
   WorkforceStatus,
 } from "./types"
 
 const REQUEST_TIMEOUT_MS = 12_000
+
+export class AiApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message)
+    this.name = "AiApiError"
+  }
+}
 
 function apiUrl() {
   const value = process.env.GRITGRID_AI_API_URL?.trim()
@@ -32,7 +45,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (token) headers.set("Authorization", `Bearer ${token}`)
 
   try {
-    const response = await fetch(`${apiUrl()}${path}`, {
+    const response = await fetch(`/api/ai${path}`, {
       ...init,
       headers,
       cache: "no-store",
@@ -44,7 +57,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         payload && typeof payload === "object" && "detail" in payload
           ? String(payload.detail)
           : `AI backend returned ${response.status}`
-      throw new Error(detail)
+      throw new AiApiError(detail, response.status)
     }
     return payload as T
   } catch (error) {
@@ -67,7 +80,11 @@ export const aiClient = {
           const detail = await request<Omit<AgentSummary, "available">>(
             `/agents/${encodeURIComponent(agent.name)}`,
           )
-          return { ...agent, ...detail }
+          return {
+            ...agent,
+            ...detail,
+            capabilities: detail.capabilities?.length ? detail.capabilities : agent.capabilities,
+          }
         } catch {
           return agent
         }
@@ -75,11 +92,18 @@ export const aiClient = {
     )
   },
   getWorkforceStatus: () => request<WorkforceStatus>("/workforce/status"),
+  getWorkforceMetrics: () => request<WorkforceMetrics>("/workforce/metrics"),
+  getArtifacts: () => request<ArtifactRecord[]>("/artifacts"),
+  getProviders: () => request<ProviderCatalog>("/providers"),
   createTask: (input: TaskCreateInput) =>
     request<TaskRecord>("/tasks", { method: "POST", body: JSON.stringify(input) }),
   getTasks: (status?: string) =>
     request<TaskRecord[]>(status ? `/tasks?status=${encodeURIComponent(status)}` : "/tasks"),
   getTask: (taskId: string | number) => request<TaskRecord>(`/tasks/${encodeURIComponent(taskId)}`),
+  executeTask: (taskId: string | number) =>
+    request<TaskRecord>(`/tasks/${encodeURIComponent(taskId)}/execute`, { method: "POST" }),
+  cancelTask: (taskId: string | number) =>
+    request<TaskRecord>(`/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" }),
   getRuns: (limit = 100) => request<RunRecord[]>(`/runs?limit=${limit}`),
   getEvents: (limit = 100) => request<EventRecord[]>(`/events?limit=${limit}`),
   getMemory: (query?: string) =>
@@ -90,13 +114,19 @@ export const aiClient = {
     request<MemoryRecord>(`/memory/${memoryId}`, { method: "PUT", body: JSON.stringify(input) }),
   deleteMemory: (memoryId: number) =>
     request<{ deleted: boolean; id: number }>(`/memory/${memoryId}`, { method: "DELETE" }),
-  getApprovals: () => request<ApprovalRecord[]>("/approvals"),
+  getApprovals: (status?: "pending" | "approved" | "rejected") =>
+    request<ApprovalRecord[]>(status ? `/approvals?status=${status}` : "/approvals"),
   decideApproval: (approvalId: number, decision: "approve" | "reject") =>
     request<ApprovalDecision>(`/approvals/${approvalId}/${decision}`, { method: "POST" }),
   runObjective: (objective: string) =>
     request<ObjectiveResult>("/orchestrator/run", {
       method: "POST",
       body: JSON.stringify({ objective }),
+    }),
+  createCeoTask: (input: CEOTaskRequest) =>
+    request<CEOTaskResponse>("/agents/ceo/tasks", {
+      method: "POST",
+      body: JSON.stringify(input),
     }),
 }
 

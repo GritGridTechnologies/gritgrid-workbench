@@ -1,5 +1,5 @@
-import { AiWorkforce } from "@/components/workbench/ai-workforce"
+import { WorkforceDashboard } from "@/components/workbench/workforce-dashboard"
 
 export default function Home() {
-  return <AiWorkforce />
+  return <WorkforceDashboard />
 }

@@ -5,9 +5,13 @@ import { AuthError, requireRole } from "@/lib/auth-server"
 const ALLOWED_PATHS = [
   /^health$/,
   /^agents(?:\/[^/]+)?$/,
+  /^agents\/ceo\/tasks$/,
   /^workforce\/status$/,
+  /^workforce\/metrics$/,
   /^tasks(?:\/[^/]+)?(?:\/execute|\/cancel)?$/,
   /^orchestrator\/run$/,
+  /^artifacts$/,
+  /^providers$/,
   /^memory(?:\/\d+)?$/,
   /^approvals(?:\/\d+\/(?:approve|reject))?$/,
   /^events$/,

@@ -1,8 +1,15 @@
 export interface AgentSummary {
+  id: string
   name: string
-  available: boolean
+  display_name?: string
+  description?: string
+  status?: string
+  availability?: string
+  available?: boolean
   role?: string
   capabilities?: string[]
+  permissions?: string[]
+  required_model_capabilities?: string[]
 }
 
 export interface WorkforceStatus {
@@ -13,6 +20,44 @@ export interface WorkforceStatus {
   running_tasks: number
   completed_tasks: number
   failed_tasks: number
+}
+
+export interface WorkforceMetrics {
+  total_agents?: number
+  available_agents?: number
+  running_tasks?: number
+  pending_tasks?: number
+  waiting_tasks?: number
+  pending_approvals?: number
+  completed_tasks?: number
+  failed_tasks?: number
+  artifact_count?: number
+  available_providers?: number
+  [key: string]: number | undefined
+}
+
+export interface ProviderRecord {
+  provider: string
+  capabilities?: string[]
+  status?: string
+  error?: string | null
+}
+
+export interface ProviderCatalog {
+  providers: ProviderRecord[]
+  routing: Record<string, string | null>
+}
+
+export interface ArtifactRecord {
+  id: number
+  artifact_id: string
+  artifact_type: string
+  task_id: string | number | null
+  provider: string | null
+  metadata: Record<string, unknown>
+  location: string | null
+  status?: string | null
+  created_at?: string | null
 }
 
 export interface TaskRecord {
@@ -33,6 +78,8 @@ export interface TaskRecord {
   completed_at: string | null
   claimed_by: string | null
   lease_expires_at: string | null
+  approvals?: ApprovalRecord[]
+  artifacts?: ArtifactRecord[]
 }
 
 export interface RunRecord {
@@ -64,6 +111,8 @@ export interface ApprovalRecord {
   status: string
   requested_by: string
   created_at: string
+  approved_by?: string | null
+  resolved_at?: string | null
 }
 
 export interface MemoryRecord {
@@ -112,4 +161,15 @@ export interface AiHealth {
   database: string
   openai: string
   [key: string]: string
+}
+
+export interface CEOTaskRequest {
+  goal: string
+}
+
+export interface CEOTaskResponse {
+  task?: TaskRecord
+  tasks?: TaskRecord[]
+  plan?: Record<string, unknown> | null
+  [key: string]: unknown
 }
